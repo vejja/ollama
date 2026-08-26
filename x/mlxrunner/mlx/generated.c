@@ -1656,6 +1656,7 @@ int (*mlx_quantized_matmul_)(
     mlx_optional_int group_size,
     mlx_optional_int bits,
     const char* mode,
+    const mlx_array global_scale /* may be null */,
     const mlx_stream s) = NULL;
 int (*mlx_radians_)(mlx_array* res, const mlx_array a, const mlx_stream s) = NULL;
 int (*mlx_real_)(mlx_array* res, const mlx_array a, const mlx_stream s) = NULL;

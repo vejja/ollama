@@ -121,13 +121,16 @@ var quantizedLinearOutputScale = mlx.Compile2(
 )
 
 func (ql *QuantizedLinear) Forward(x *mlx.Array) *mlx.Array {
-	out := mlx.QuantizedMatmul(x, ql.Weight, ql.Scales, ql.QBiases, true, ql.GroupSize, ql.Bits, ql.Mode)
-	if ql.GlobalScale != nil {
-		// Double-scale nvfp4 (e.g., NVIDIA ModelOpt): standard quantized_matmul
-		// followed by global_scale multiply. The global_scale is F32, per-tensor
-		// (weight_scale_2 in NVIDIA's format) or per-row.
-		// TODO: switch to a fused double-scale matmul once MLX has kernel
-		// coverage for this path.
+	var fusedGlobalScale *mlx.Array
+	if ql.GlobalScale != nil && ql.Mode == "nvfp4" {
+		// MLX stores the product of the E4M3 and E2M1 maxima in its NVFP4
+		// global scale. ModelOpt stores the effective multiplier directly,
+		// either once per tensor or once per output row.
+		fusedGlobalScale = mlx.MulScalar(ql.GlobalScale, 448*6)
+	}
+	out := mlx.QuantizedMatmul(x, ql.Weight, ql.Scales, ql.QBiases, true, ql.GroupSize, ql.Bits, ql.Mode, fusedGlobalScale)
+	if ql.GlobalScale != nil && fusedGlobalScale == nil {
+		// Retain the generic fallback for non-NVFP4 quantization modes.
 		out = quantizedLinearOutputScale(out, ql.GlobalScale)
 	}
 	if ql.Bias != nil && ql.Bias.Valid() {

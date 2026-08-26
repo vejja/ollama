@@ -3,6 +3,7 @@ package mlxrunner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ollama/ollama/api"
+	"github.com/ollama/ollama/envconfig"
 	"github.com/ollama/ollama/x/internal/mlxthread"
 	"github.com/ollama/ollama/x/mlxrunner/cache"
 	"github.com/ollama/ollama/x/mlxrunner/mlx"
@@ -67,6 +69,9 @@ func (r *Runner) Load(modelName string) error {
 	if err != nil {
 		return err
 	}
+	if err := adaptNVFP4ComputeDType(tensors, root.QuantType(), envconfig.MLXComputeDType()); err != nil {
+		return err
+	}
 
 	// Assign weights to model (model-specific logic). Target and draft weights
 	// must be loaded before sweeping so tensors from a combined manifest are
@@ -118,6 +123,72 @@ func (r *Runner) Load(modelName string) error {
 
 	mlx.EnableCompile()
 
+	return nil
+}
+
+// adaptNVFP4ComputeDType materializes the unquantized support tensors of an
+// NVFP4 checkpoint in the requested 16-bit dtype. Quantized weights, scales,
+// biases, and F32 recurrent state parameters are left untouched.
+//
+// The conversion is deliberately opt-in until the faster default has been
+// benchmarked across Apple GPU generations. It avoids maintaining a second
+// checkpoint whose only material difference is BF16 versus FP16 support
+// tensors.
+func adaptNVFP4ComputeDType(tensors map[string]*mlx.Array, quantType, requested string) error {
+	requested = strings.ToLower(strings.TrimSpace(requested))
+	if requested == "" || requested == "auto" {
+		return nil
+	}
+
+	var from, to mlx.DType
+	switch requested {
+	case "float16", "f16", "fp16":
+		from, to = mlx.DTypeBFloat16, mlx.DTypeFloat16
+	case "bfloat16", "bf16":
+		from, to = mlx.DTypeFloat16, mlx.DTypeBFloat16
+	default:
+		return fmt.Errorf("invalid OLLAMA_MLX_COMPUTE_DTYPE %q: expected auto, float16, or bfloat16", requested)
+	}
+
+	if !strings.EqualFold(quantType, "NVFP4") {
+		slog.Debug("Ignoring MLX compute dtype override for non-NVFP4 model", "quantization_type", quantType)
+		return nil
+	}
+
+	converted := make([]*mlx.Array, 0)
+	convertedBytes := 0
+	for name, tensor := range tensors {
+		if tensor == nil || tensor.DType() != from {
+			continue
+		}
+		cast := tensor.AsType(to)
+		tensors[name] = cast
+		converted = append(converted, cast)
+		convertedBytes += cast.NumBytes()
+	}
+	if len(converted) == 0 {
+		slog.Info("NVFP4 support tensors already use requested MLX compute dtype", "dtype", to)
+		return nil
+	}
+
+	// Keep the current tensor map alive while materializing casts, then release
+	// the source arrays and cast graphs before model construction.
+	current := make([]*mlx.Array, 0, len(tensors))
+	for _, tensor := range tensors {
+		if tensor != nil {
+			current = append(current, tensor)
+		}
+	}
+	mlx.Pin(current...)
+	mlx.Eval(converted...)
+	mlx.Sweep()
+	mlx.Unpin(current...)
+
+	slog.Info("Converted NVFP4 support tensors for MLX compute",
+		"from", from,
+		"to", to,
+		"count", len(converted),
+		"bytes", convertedBytes)
 	return nil
 }
 

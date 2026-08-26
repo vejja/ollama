@@ -26,6 +26,13 @@ func gatedDeltaTestInputs36(g gatedDeltaTestGeometry, T int) gatedDeltaTestInput
 	}
 }
 
+func gatedDeltaInputsAsType(in gatedDeltaTestInputs, dtype DType) gatedDeltaTestInputs {
+	in.packed = in.packed.AsType(dtype)
+	in.ba = in.ba.AsType(dtype)
+	in.dtBias = in.dtBias.AsType(dtype)
+	return in
+}
+
 // gatedDeltaReference runs the graph implementation the fused kernels fall
 // back to; the test pins the kernels against it bit-for-bit.
 func gatedDeltaReference(in gatedDeltaTestInputs, captureAll bool) (y, nextState *Array, interior []*Array) {
@@ -33,8 +40,8 @@ func gatedDeltaReference(in gatedDeltaTestInputs, captureAll bool) (y, nextState
 }
 
 // Exactness is per compiler pair: the metallib and the runtime JIT round
-// metal::exp a float ulp apart, which after bf16 rounding leaves rare
-// differing inputs (beta sigmoid at -6.84375); the lattice here avoids them.
+// metal::exp a float ulp apart. Rare inputs can differ after 16-bit rounding;
+// this lattice avoids them.
 func TestGatedDeltaMatchesGraph(t *testing.T) {
 	skipIfNoMLX(t)
 	withMLXThread(t, func() {
@@ -43,6 +50,12 @@ func TestGatedDeltaMatchesGraph(t *testing.T) {
 }
 
 func testGatedDeltaMatchesGraph(t *testing.T) {
+	for _, dtype := range []DType{DTypeBFloat16, DTypeFloat16} {
+		testGatedDeltaMatchesGraphForType(t, dtype)
+	}
+}
+
+func testGatedDeltaMatchesGraphForType(t *testing.T, dtype DType) {
 	geometries := []gatedDeltaTestGeometry{
 		{Hk: 16, Dk: 128, Hv: 32, Dv: 128},
 		{Hk: 4, Dk: 64, Hv: 8, Dv: 32},
@@ -51,8 +64,11 @@ func testGatedDeltaMatchesGraph(t *testing.T) {
 		for T := 1; T <= gatedDeltaMaxTokens; T++ {
 			for _, B := range []int{1, 3} {
 				for _, captureAll := range []bool{false, true} {
-					name := fmt.Sprintf("hk%d_dk%d_T%d_B%d_all%v", g.Hk, g.Dk, T, B, captureAll)
-					in := batchGatedDeltaRows(gatedDeltaTestInputs36(g, T), B)
+					name := fmt.Sprintf("dtype%s_hk%d_dk%d_T%d_B%d_all%v", dtype, g.Hk, g.Dk, T, B, captureAll)
+					in := gatedDeltaInputsAsType(batchGatedDeltaRows(gatedDeltaTestInputs36(g, T), B), dtype)
+					if _, ok := resolveGatedDeltaDims(in.packed, in.ba, in.dtBias, in.aExp, in.state); !ok {
+						t.Fatalf("%s: fused route rejected valid inputs", name)
+					}
 					refY, refState, refInterior := gatedDeltaReference(in, captureAll)
 					y, state, interior := GatedDelta(in.packed, in.ba, in.dtBias, in.aExp, in.state, nil, captureAll)
 					if err := requireExact("y", y, refY); err != nil {
@@ -99,6 +115,11 @@ func testGatedDeltaGraphRouting(t *testing.T) {
 		if len(interior) != len(refInterior) {
 			t.Fatalf("%s: interior count = %d, want %d", name, len(interior), len(refInterior))
 		}
+		for i := range interior {
+			if err := requireExact(fmt.Sprintf("interior[%d]", i), interior[i], refInterior[i]); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+		}
 	}
 
 	check("tooLong", gatedDeltaTestInputs36(g, gatedDeltaMaxTokens+1), true)
@@ -106,6 +127,17 @@ func testGatedDeltaGraphRouting(t *testing.T) {
 	f32 := gatedDeltaTestInputs36(g, 2)
 	f32.packed = f32.packed.AsType(DTypeFloat32)
 	check("float32", f32, false)
+
+	f16 := gatedDeltaInputsAsType(gatedDeltaTestInputs36(g, 2), DTypeFloat16)
+	if _, ok := resolveGatedDeltaDims(f16.packed, f16.ba, f16.dtBias, f16.aExp, f16.state); !ok {
+		t.Fatal("float16 inputs rejected fused route")
+	}
+	mixed := f16
+	mixed.ba = mixed.ba.AsType(DTypeBFloat16)
+	if _, ok := resolveGatedDeltaDims(mixed.packed, mixed.ba, mixed.dtBias, mixed.aExp, mixed.state); ok {
+		t.Fatal("mixed float16 and bfloat16 inputs accepted fused route")
+	}
+	check("mixed16", mixed, false)
 }
 
 // batchGatedDeltaRows widens a single-row input to B rows with distinct
@@ -146,15 +178,17 @@ func scaledGatedDeltaRow(base gatedDeltaTestInputs, scale float32) gatedDeltaTes
 func TestGatedDeltaBatchedRows(t *testing.T) {
 	skipIfNoMLX(t)
 	withMLXThread(t, func() {
-		testGatedDeltaBatchedRows(t)
+		for _, dtype := range []DType{DTypeBFloat16, DTypeFloat16} {
+			testGatedDeltaBatchedRows(t, dtype)
+		}
 	})
 }
 
 // Each batched row must match its own single-row launch bit-for-bit.
-func testGatedDeltaBatchedRows(t *testing.T) {
+func testGatedDeltaBatchedRows(t *testing.T, dtype DType) {
 	g := gatedDeltaTestGeometry{Hk: 4, Dk: 64, Hv: 8, Dv: 32}
 	for _, T := range []int{1, 5, 11} {
-		rows := []gatedDeltaTestInputs{gatedDeltaTestInputs36(g, T)}
+		rows := []gatedDeltaTestInputs{gatedDeltaInputsAsType(gatedDeltaTestInputs36(g, T), dtype)}
 		rows = append(rows, scaledGatedDeltaRow(rows[0], 0.7), scaledGatedDeltaRow(rows[0], 0.4))
 
 		packed := Concatenate([]*Array{rows[0].packed, rows[1].packed, rows[2].packed}, 0)
@@ -171,10 +205,10 @@ func testGatedDeltaBatchedRows(t *testing.T) {
 				[]int32{int32(i), 0, 0, 0},
 				[]int32{int32(i) + 1, int32(g.Hv), int32(g.Dv), int32(g.Dk)})
 			if err := requireExact("y", gotY, refY); err != nil {
-				t.Fatalf("T=%d row %d: %v", T, i, err)
+				t.Fatalf("dtype=%s T=%d row %d: %v", dtype, T, i, err)
 			}
 			if err := requireExact("state", gotEnd, refEnd); err != nil {
-				t.Fatalf("T=%d row %d: %v", T, i, err)
+				t.Fatalf("dtype=%s T=%d row %d: %v", dtype, T, i, err)
 			}
 		}
 	}
@@ -183,7 +217,9 @@ func testGatedDeltaBatchedRows(t *testing.T) {
 func TestGatedDeltaRaggedRows(t *testing.T) {
 	skipIfNoMLX(t)
 	withMLXThread(t, func() {
-		testGatedDeltaRaggedRows(t)
+		for _, dtype := range []DType{DTypeBFloat16, DTypeFloat16} {
+			testGatedDeltaRaggedRows(t, dtype)
+		}
 	})
 }
 
@@ -191,10 +227,10 @@ func TestGatedDeltaRaggedRows(t *testing.T) {
 // ba tail poisoned to -inf — runs identity steps with zero output there: its
 // full output and final state must match a launch of only its real tokens
 // with zeros appended, while the full-length row is unaffected.
-func testGatedDeltaRaggedRows(t *testing.T) {
+func testGatedDeltaRaggedRows(t *testing.T, dtype DType) {
 	g := gatedDeltaTestGeometry{Hk: 4, Dk: 64, Hv: 8, Dv: 32}
 	const T, realLen = 6, 4
-	row0 := gatedDeltaTestInputs36(g, T)
+	row0 := gatedDeltaInputsAsType(gatedDeltaTestInputs36(g, T), dtype)
 	row1 := scaledGatedDeltaRow(row0, 0.7)
 
 	pad := make([]float32, (T-realLen)*2*g.Hv)
@@ -204,11 +240,11 @@ func testGatedDeltaRaggedRows(t *testing.T) {
 	}
 	row1BA := Concatenate([]*Array{
 		SliceStartStop(row1.ba, []int32{0, 0, 0}, []int32{1, realLen, int32(2 * g.Hv)}),
-		FromValues(pad, 1, T-realLen, 2*g.Hv).AsType(DTypeBFloat16),
+		FromValues(pad, 1, T-realLen, 2*g.Hv).AsType(dtype),
 	}, 1)
 	row1Packed := Concatenate([]*Array{
 		SliceStartStop(row1.packed, []int32{0, 0, 0}, []int32{1, realLen, int32(g.packedDim())}),
-		Zeros(DTypeBFloat16, 1, T-realLen, g.packedDim()),
+		Zeros(dtype, 1, T-realLen, g.packedDim()),
 	}, 1)
 
 	packed := Concatenate([]*Array{row0.packed, row1Packed}, 0)
@@ -216,6 +252,20 @@ func testGatedDeltaRaggedRows(t *testing.T) {
 	state := Concatenate([]*Array{row0.state, row1.state}, 0)
 
 	y, end, _ := GatedDelta(packed, ba, row0.dtBias, row0.aExp, state, nil, false)
+	mask := FromValues([]bool{
+		true, true, true, true, true, true,
+		true, true, true, true, false, false,
+	}, 2, T)
+	maskedY, maskedEnd, _ := GatedDelta(
+		Concatenate([]*Array{row0.packed, row1.packed}, 0),
+		Concatenate([]*Array{row0.ba, row1.ba}, 0),
+		row0.dtBias, row0.aExp, state, mask, false)
+	if err := requireExact("masked y", maskedY, y); err != nil {
+		t.Fatal(err)
+	}
+	if err := requireExact("masked state", maskedEnd, end); err != nil {
+		t.Fatal(err)
+	}
 
 	ref0Y, ref0End, _ := GatedDelta(row0.packed, row0.ba, row0.dtBias, row0.aExp, row0.state, nil, false)
 	got0Y := SliceStartStop(y, []int32{0, 0, 0, 0}, []int32{1, T, int32(g.Hv), int32(g.Dv)})
@@ -230,7 +280,7 @@ func testGatedDeltaRaggedRows(t *testing.T) {
 	prefixPacked := SliceStartStop(row1.packed, []int32{0, 0, 0}, []int32{1, realLen, int32(g.packedDim())})
 	prefixBA := SliceStartStop(row1.ba, []int32{0, 0, 0}, []int32{1, realLen, int32(2 * g.Hv)})
 	ref1Y, ref1End, _ := GatedDelta(prefixPacked, prefixBA, row1.dtBias, row1.aExp, row1.state, nil, false)
-	want1Y := Concatenate([]*Array{ref1Y, Zeros(DTypeBFloat16, 1, T-realLen, g.Hv, g.Dv)}, 1)
+	want1Y := Concatenate([]*Array{ref1Y, Zeros(dtype, 1, T-realLen, g.Hv, g.Dv)}, 1)
 	got1Y := SliceStartStop(y, []int32{1, 0, 0, 0}, []int32{2, T, int32(g.Hv), int32(g.Dv)})
 	got1End := SliceStartStop(end, []int32{1, 0, 0, 0}, []int32{2, int32(g.Hv), int32(g.Dv), int32(g.Dk)})
 	if err := requireExact("row1 y", got1Y, want1Y); err != nil {

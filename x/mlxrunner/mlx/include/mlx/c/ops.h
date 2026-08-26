@@ -816,6 +816,7 @@ int mlx_quantized_matmul(
     mlx_optional_int group_size,
     mlx_optional_int bits,
     const char* mode,
+    const mlx_array global_scale /* may be null */,
     const mlx_stream s);
 int mlx_radians(mlx_array* res, const mlx_array a, const mlx_stream s);
 int mlx_real(mlx_array* res, const mlx_array a, const mlx_stream s);
