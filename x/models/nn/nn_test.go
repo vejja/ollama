@@ -185,6 +185,71 @@ func TestQuantizedLinearMXFP4MatchesDequantizedWeight(t *testing.T) {
 	}
 }
 
+func TestQuantizedLinearNVFP4FusesModelOptGlobalScale(t *testing.T) {
+	skipIfNoMLX(t)
+
+	const rows, cols, group = 2, 64, 16
+	packed := make([]uint32, rows*cols/8)
+	for i := range packed {
+		packed[i] = 0x77777777 // Eight E2M1 values of 6.
+	}
+	scaleBits := make([]uint8, rows*(cols/group))
+	for i := range scaleBits {
+		scaleBits[i] = 0x38 // E4M3 value 1.
+	}
+	x := mlx.AddScalar(mlx.FromValues(make([]float32, cols), 1, cols), 1).AsType(mlx.DTypeFloat16)
+
+	ql := &QuantizedLinear{
+		Weight:      mlx.FromValues(packed, rows, cols/8),
+		Scales:      mlx.FromValues(scaleBits, rows, cols/group),
+		GlobalScale: mlx.FromValues([]float32{0.0001}, 1),
+		GroupSize:   group,
+		Bits:        4,
+		Mode:        "nvfp4",
+	}
+	out := ql.Forward(x).AsType(mlx.DTypeFloat32)
+	mlx.Eval(out)
+
+	for i, got := range out.Floats() {
+		if want := float32(cols * 6 * 0.0001); !approxEqual(got, want, 1e-3) {
+			t.Fatalf("output[%d] = %v, want %v", i, got, want)
+		}
+	}
+}
+
+func TestQuantizedLinearNVFP4FusesPerRowModelOptGlobalScale(t *testing.T) {
+	skipIfNoMLX(t)
+
+	const rows, cols, group = 2, 64, 16
+	packed := make([]uint32, rows*cols/8)
+	for i := range packed {
+		packed[i] = 0x77777777
+	}
+	scaleBits := make([]uint8, rows*(cols/group))
+	for i := range scaleBits {
+		scaleBits[i] = 0x38
+	}
+	x := mlx.AddScalar(mlx.FromValues(make([]float32, cols), 1, cols), 1).AsType(mlx.DTypeFloat16)
+
+	ql := &QuantizedLinear{
+		Weight:      mlx.FromValues(packed, rows, cols/8),
+		Scales:      mlx.FromValues(scaleBits, rows, cols/group),
+		GlobalScale: mlx.FromValues([]float32{0.0001, 0.0002}, rows),
+		GroupSize:   group,
+		Bits:        4,
+		Mode:        "nvfp4",
+	}
+	out := ql.Forward(x).AsType(mlx.DTypeFloat32)
+	mlx.Eval(out)
+
+	for i, got := range out.Floats() {
+		want := float32(cols*6) * []float32{0.0001, 0.0002}[i]
+		if !approxEqual(got, want, 1e-3) {
+			t.Fatalf("output[%d] = %v, want %v", i, got, want)
+		}
+	}
+}
+
 func TestQuantizedEmbeddingAsLinearPreservesGlobalScale(t *testing.T) {
 	weight := &mlx.Array{}
 	scales := &mlx.Array{}

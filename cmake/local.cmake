@@ -143,6 +143,8 @@ set(_mlx_source_targets)
 if(OLLAMA_MLX_BACKENDS)
     file(READ "${CMAKE_SOURCE_DIR}/MLX_VERSION" OLLAMA_MLX_GIT_TAG)
     string(STRIP "${OLLAMA_MLX_GIT_TAG}" OLLAMA_MLX_GIT_TAG)
+    set(OLLAMA_MLX_GIT_REPOSITORY "https://github.com/vejja/mlx.git" CACHE STRING
+        "MLX source repository used by the personal FP16 distribution")
     file(READ "${CMAKE_SOURCE_DIR}/MLX_C_VERSION" OLLAMA_MLX_C_GIT_TAG)
     string(STRIP "${OLLAMA_MLX_C_GIT_TAG}" OLLAMA_MLX_C_GIT_TAG)
 
@@ -157,7 +159,7 @@ if(OLLAMA_MLX_BACKENDS)
     else()
         set(OLLAMA_MLX_SOURCE_DIR "${CMAKE_BINARY_DIR}/_deps/mlx-src")
         ExternalProject_Add(ollama-mlx-source
-            GIT_REPOSITORY "https://github.com/ml-explore/mlx.git"
+            GIT_REPOSITORY "${OLLAMA_MLX_GIT_REPOSITORY}"
             GIT_TAG ${OLLAMA_MLX_GIT_TAG}
             # MLX uses commit hashes while we track closely; switch to shallow when MLX pins move to tags.
             GIT_SHALLOW FALSE
@@ -169,13 +171,15 @@ if(OLLAMA_MLX_BACKENDS)
         list(APPEND _mlx_source_targets ollama-mlx-source)
     endif()
 
-    # Temporary MLX-C carry patch: regenerated bindings for force_fused and the
-    # thread-local compile cache, carried until they merge upstream into
-    # ml-explore/mlx-c. Then bump MLX_C_VERSION and delete mlx/compat/.
+    # Temporary MLX-C carry patches. The first tracks upstream MLX API drift;
+    # the second exposes the personal NVFP4 global-scale operation without
+    # changing the existing mlx_quantized_matmul ABI.
     find_package(Git REQUIRED)
     set(OLLAMA_MLX_C_COMPAT_PATCH_COMMAND
-        ${GIT_EXECUTABLE} apply ${CMAKE_SOURCE_DIR}/mlx/compat/0001-mlx-c-regen-0.32.1.patch
-        CACHE INTERNAL "MLX-C carry patch")
+        ${GIT_EXECUTABLE} apply
+            ${CMAKE_SOURCE_DIR}/mlx/compat/0001-mlx-c-regen-0.32.1.patch
+            ${CMAKE_SOURCE_DIR}/mlx/compat/0002-mlx-c-nvfp4-global-scale.patch
+        CACHE INTERNAL "MLX-C carry patches")
 
     if(DEFINED "FETCHCONTENT_SOURCE_DIR_MLX-C" AND NOT "${FETCHCONTENT_SOURCE_DIR_MLX-C}" STREQUAL "")
         get_filename_component(OLLAMA_MLX_C_SOURCE_DIR

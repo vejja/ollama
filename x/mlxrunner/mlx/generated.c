@@ -1657,6 +1657,18 @@ int (*mlx_quantized_matmul_)(
     mlx_optional_int bits,
     const char* mode,
     const mlx_stream s) = NULL;
+int (*mlx_quantized_matmul_global_scale_)(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array w,
+    const mlx_array scales,
+    const mlx_array biases /* may be null */,
+    bool transpose,
+    mlx_optional_int group_size,
+    mlx_optional_int bits,
+    const char* mode,
+    const mlx_array global_scale,
+    const mlx_stream s) = NULL;
 int (*mlx_radians_)(mlx_array* res, const mlx_array a, const mlx_stream s) = NULL;
 int (*mlx_real_)(mlx_array* res, const mlx_array a, const mlx_stream s) = NULL;
 int (*mlx_reciprocal_)(mlx_array* res, const mlx_array a, const mlx_stream s) = NULL;
@@ -2832,6 +2844,7 @@ int mlx_dynamic_load_symbols(mlx_dynamic_handle handle) {
     CHECK_LOAD(handle, mlx_qqmm);
     CHECK_LOAD(handle, mlx_quantize);
     CHECK_LOAD(handle, mlx_quantized_matmul);
+    CHECK_LOAD(handle, mlx_quantized_matmul_global_scale);
     CHECK_LOAD(handle, mlx_radians);
     CHECK_LOAD(handle, mlx_real);
     CHECK_LOAD(handle, mlx_reciprocal);

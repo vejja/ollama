@@ -448,6 +448,7 @@
 #define mlx_qqmm mlx_qqmm_mlx_gen_orig_
 #define mlx_quantize mlx_quantize_mlx_gen_orig_
 #define mlx_quantized_matmul mlx_quantized_matmul_mlx_gen_orig_
+#define mlx_quantized_matmul_global_scale mlx_quantized_matmul_global_scale_mlx_gen_orig_
 #define mlx_radians mlx_radians_mlx_gen_orig_
 #define mlx_real mlx_real_mlx_gen_orig_
 #define mlx_reciprocal mlx_reciprocal_mlx_gen_orig_
@@ -1071,6 +1072,7 @@
 #undef mlx_qqmm
 #undef mlx_quantize
 #undef mlx_quantized_matmul
+#undef mlx_quantized_matmul_global_scale
 #undef mlx_radians
 #undef mlx_real
 #undef mlx_reciprocal
@@ -2899,6 +2901,18 @@ extern int (*mlx_quantized_matmul_)(
     mlx_optional_int group_size,
     mlx_optional_int bits,
     const char* mode,
+    const mlx_stream s);
+extern int (*mlx_quantized_matmul_global_scale_)(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array w,
+    const mlx_array scales,
+    const mlx_array biases /* may be null */,
+    bool transpose,
+    mlx_optional_int group_size,
+    mlx_optional_int bits,
+    const char* mode,
+    const mlx_array global_scale,
     const mlx_stream s);
 extern int (*mlx_radians_)(mlx_array* res, const mlx_array a, const mlx_stream s);
 extern int (*mlx_real_)(mlx_array* res, const mlx_array a, const mlx_stream s);
@@ -6169,6 +6183,20 @@ static inline int mlx_quantized_matmul(
     const char* mode,
     const mlx_stream s) {
     return mlx_quantized_matmul_(res, x, w, scales, biases, transpose, group_size, bits, mode, s);
+}
+static inline int mlx_quantized_matmul_global_scale(
+    mlx_array* res,
+    const mlx_array x,
+    const mlx_array w,
+    const mlx_array scales,
+    const mlx_array biases /* may be null */,
+    bool transpose,
+    mlx_optional_int group_size,
+    mlx_optional_int bits,
+    const char* mode,
+    const mlx_array global_scale,
+    const mlx_stream s) {
+    return mlx_quantized_matmul_global_scale_(res, x, w, scales, biases, transpose, group_size, bits, mode, global_scale, s);
 }
 static inline int mlx_radians(mlx_array* res, const mlx_array a, const mlx_stream s) {
     return mlx_radians_(res, a, s);
