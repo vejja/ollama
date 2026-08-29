@@ -77,6 +77,3 @@ index 44fc09c..cb5bf07 100644
  int mlx_radians(mlx_array* res, const mlx_array a, const mlx_stream s);
  int mlx_real(mlx_array* res, const mlx_array a, const mlx_stream s);
  int mlx_reciprocal(mlx_array* res, const mlx_array a, const mlx_stream s);
--- 
-2.50.1 (Apple Git-155)
-
