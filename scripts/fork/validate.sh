@@ -22,7 +22,7 @@ python_venv="$repo_root/build/fork-mlx-python-venv"
 cd "$repo_root"
 go test ./envconfig ./x/mlxrunner/... ./x/models/nn ./x/models/qwen3_5
 
-rm -rf "$mlx_test_build"
+/bin/rm -rf "$mlx_test_build"
 cmake -S "$mlx_source" -B "$mlx_test_build" \
   -DCMAKE_BUILD_TYPE=Release \
   -DMLX_BUILD_TESTS=ON \
@@ -33,10 +33,10 @@ cmake --build "$mlx_test_build" --target tests --parallel "${OLLAMA_BUILD_PARALL
 ctest --test-dir "$mlx_test_build" --output-on-failure
 
 cd "$mlx_source"
-for path in build/temp.*(N) build/lib.*(N); do
-  rm -rf -- "$path"
+for build_path in build/temp.*(N) build/lib.*(N); do
+  /bin/rm -rf -- "$build_path"
 done
-rm -rf "$python_venv"
+/bin/rm -rf "$python_venv"
 "$python_bin" -m venv "$python_venv"
 python_runner="$python_venv/bin/python"
 "$python_runner" -m pip install --disable-pip-version-check setuptools wheel
