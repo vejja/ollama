@@ -10,7 +10,7 @@
   "mlx": {
     "repository": "https://github.com/vejja/mlx.git",
     "upstream_commit": "27fec909a3df9e572f5195607a453e273e7d80d0",
-    "patched_commit": "e01ed2fd882468549a3047432a210bf1c0df1160"
+    "patched_commit": "c37018b1af089c4810d0d7bddc38504a634768b9"
   },
   "mlx_c": {
     "repository": "https://github.com/ml-explore/mlx-c.git",
