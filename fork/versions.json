@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "distribution": "balaise-fp16-m2",
+  "release": "v0.33.0-fp16.1",
+  "ollama": {
+    "upstream_tag": "v0.33.0",
+    "upstream_commit": "ebf200f9521da9739a576a8bbf8cbf94e0cec6e3",
+    "original_patch_commit": "84af22597ece5b5c10ad1ee7b92a0794f374516b"
+  },
+  "mlx": {
+    "repository": "https://github.com/vejja/mlx.git",
+    "upstream_commit": "27fec909a3df9e572f5195607a453e273e7d80d0",
+    "patched_commit": "e01ed2fd882468549a3047432a210bf1c0df1160"
+  },
+  "mlx_c": {
+    "repository": "https://github.com/ml-explore/mlx-c.git",
+    "upstream_commit": "fba4470b89073180056c9ea46c443051375f7399",
+    "compat_patches": [
+      "mlx/compat/0001-mlx-c-regen-0.32.1.patch",
+      "mlx/compat/0002-mlx-c-nvfp4-global-scale.patch"
+    ]
+  },
+  "build": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "mlx_backends": ["metal_v3", "metal_v4"],
+    "compute_dtype": "float16"
+  }
+}
