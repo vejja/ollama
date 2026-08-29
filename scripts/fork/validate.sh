@@ -8,6 +8,7 @@ brew_prefix="${HOMEBREW_PREFIX:-/opt/homebrew}"
 python_bin="${PYTHON:-$brew_prefix/bin/python3}"
 mlx_source="$repo_root/build/darwin-sources/_deps/mlx-src"
 mlx_test_build="$repo_root/build/fork-mlx-tests"
+python_venv="$repo_root/build/fork-mlx-python-venv"
 
 [[ -d "$mlx_source" ]] || {
   print -ru2 -- "build the release with scripts/fork/build.sh before validation"
@@ -35,8 +36,12 @@ cd "$mlx_source"
 for path in build/temp.*(N) build/lib.*(N); do
   rm -rf -- "$path"
 done
-"$python_bin" setup.py build_ext --inplace
-"$python_bin" -m unittest \
+rm -rf "$python_venv"
+"$python_bin" -m venv "$python_venv"
+python_runner="$python_venv/bin/python"
+"$python_runner" -m pip install --disable-pip-version-check setuptools wheel
+"$python_runner" setup.py build_ext --inplace
+"$python_runner" -m unittest \
   python.tests.test_quantized.TestQuantized.test_qmm_global_scale_error_cases \
   python.tests.test_quantized.TestQuantized.test_nvfp4_qmm_global_scale \
   python.tests.test_quantized.TestQuantized.test_nvfp4_qmm_per_output_global_scale \
