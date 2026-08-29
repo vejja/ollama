@@ -669,8 +669,10 @@ func resolveGatedDeltaDims(packed, ba, dtBias, aExp, state *Array) (gatedDeltaDi
 		!exactShape(aExp, dims.Hv) {
 		return dims, false
 	}
-	if packed.DType() != DTypeBFloat16 || ba.DType() != DTypeBFloat16 ||
-		dtBias.DType() != DTypeBFloat16 || aExp.DType() != DTypeFloat32 ||
+	inputType := packed.DType()
+	if (inputType != DTypeBFloat16 && inputType != DTypeFloat16) ||
+		ba.DType() != inputType || dtBias.DType() != inputType ||
+		aExp.DType() != DTypeFloat32 ||
 		state.DType() != DTypeFloat32 {
 		return dims, false
 	}

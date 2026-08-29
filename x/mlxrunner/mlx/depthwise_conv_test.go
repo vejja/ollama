@@ -22,7 +22,7 @@ func TestDepthwiseConvSiLUMatchesGraph(t *testing.T) {
 
 func depthwiseConvSiLUMismatches() []string {
 	var mismatches []string
-	for _, dtype := range []DType{DTypeBFloat16, DTypeFloat32} {
+	for _, dtype := range []DType{DTypeBFloat16, DTypeFloat16, DTypeFloat32} {
 		for _, withBias := range []bool{false, true} {
 			for _, shape := range []struct{ B, T, C, K int }{
 				{1, 1, 64, 4},

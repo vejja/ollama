@@ -89,7 +89,7 @@ func DepthwiseConvSiLU(x, w, bias *Array, outLen int) *Array {
 	if bias != nil && (bias.NumDims() != 1 || bias.Dim(0) != Cdim) {
 		panic(fmt.Sprintf("mlx.DepthwiseConvSiLU: bias %v does not match %d channels", bias.Dims(), Cdim))
 	}
-	if x.DType() != w.DType() || (x.DType() != DTypeBFloat16 && x.DType() != DTypeFloat32) ||
+	if x.DType() != w.DType() || (x.DType() != DTypeBFloat16 && x.DType() != DTypeFloat16 && x.DType() != DTypeFloat32) ||
 		(bias != nil && bias.DType() != x.DType()) {
 		return depthwiseConvSiLUGraph(x, w, bias)
 	}
