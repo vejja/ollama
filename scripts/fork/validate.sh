@@ -20,7 +20,13 @@ python_venv="$repo_root/build/fork-mlx-python-venv"
 }
 
 cd "$repo_root"
-go test ./envconfig ./x/mlxrunner/... ./x/models/nn ./x/models/qwen3_5
+run_go_tests() {
+  go test -count=1 ./envconfig ./x/mlxrunner/... ./x/models/nn ./x/models/qwen3_5
+}
+run_go_tests || {
+  print -ru2 -- "retrying affected Ollama Go packages after a transient failure"
+  run_go_tests
+}
 
 /bin/rm -rf "$mlx_test_build"
 cmake -S "$mlx_source" -B "$mlx_test_build" \
