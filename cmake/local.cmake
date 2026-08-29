@@ -178,6 +178,7 @@ if(OLLAMA_MLX_BACKENDS)
     set(OLLAMA_MLX_C_COMPAT_PATCH_COMMAND
         ${GIT_EXECUTABLE} apply
             ${CMAKE_SOURCE_DIR}/mlx/compat/0001-mlx-c-regen-0.32.1.patch
+        COMMAND ${GIT_EXECUTABLE} apply
             ${CMAKE_SOURCE_DIR}/mlx/compat/0002-mlx-c-nvfp4-global-scale.patch
         CACHE INTERNAL "MLX-C carry patches")
 
