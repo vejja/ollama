@@ -39,7 +39,7 @@ done
 /bin/rm -rf "$python_venv"
 "$python_bin" -m venv "$python_venv"
 python_runner="$python_venv/bin/python"
-"$python_runner" -m pip install --disable-pip-version-check setuptools wheel
+"$python_runner" -m pip install --disable-pip-version-check setuptools wheel numpy
 "$python_runner" setup.py build_ext --inplace
 PYTHONPATH="$mlx_source/python:$mlx_source/python/tests" \
   "$python_runner" -m unittest \
