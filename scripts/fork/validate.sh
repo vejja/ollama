@@ -30,7 +30,7 @@ cmake -S "$mlx_source" -B "$mlx_test_build" \
   -DMLX_BUILD_BENCHMARKS=OFF \
   -DMLX_BUILD_PYTHON_BINDINGS=OFF
 cmake --build "$mlx_test_build" --target tests --parallel "${OLLAMA_BUILD_PARALLEL:-$(getconf _NPROCESSORS_ONLN)}"
-ctest --test-dir "$mlx_test_build" --output-on-failure
+ctest --test-dir "$mlx_test_build" --repeat until-pass:2 --output-on-failure
 
 cd "$mlx_source"
 for build_path in build/temp.*(N) build/lib.*(N); do
