@@ -32,7 +32,9 @@ cmake --build "$mlx_test_build" --target tests --parallel "${OLLAMA_BUILD_PARALL
 ctest --test-dir "$mlx_test_build" --output-on-failure
 
 cd "$mlx_source"
-rm -rf build/temp.* build/lib.*
+for path in build/temp.*(N) build/lib.*(N); do
+  rm -rf -- "$path"
+done
 "$python_bin" setup.py build_ext --inplace
 "$python_bin" -m unittest \
   python.tests.test_quantized.TestQuantized.test_qmm_global_scale_error_cases \
