@@ -20,13 +20,17 @@ python_venv="$repo_root/build/fork-mlx-python-venv"
 }
 
 cd "$repo_root"
-run_go_tests() {
-  go test -count=1 ./envconfig ./x/mlxrunner/... ./x/models/nn ./x/models/qwen3_5
-}
-run_go_tests || {
-  print -ru2 -- "retrying affected Ollama Go packages after a transient failure"
-  run_go_tests
-}
+# Exercise every package and test changed by the FP16 queue. Do not include the
+# full runner/cache suites here: they bypass the production mlxthread executor
+# and can reuse MLX's thread-local default stream from a different Go OS thread.
+go test -count=1 ./envconfig
+go test -count=1 ./x/mlxrunner \
+  -run '^(TestAdaptNVFP4ComputeDType|TestAdaptNVFP4ComputeDTypeValidation)$'
+go test -count=1 ./x/mlxrunner/mlx \
+  -run '^(TestDepthwiseConvSiLUMatchesGraph|TestGatedDeltaMatchesGraph|TestGatedDeltaGraphRouting|TestGatedDeltaBatchedRows|TestGatedDeltaRaggedRows|TestGatedDeltaOutputMatchesGraph|TestDequantizeGlobalScale|TestQuantizedMatmulGlobalScaleBeforeHalfStore)$'
+go test -count=1 ./x/models/nn \
+  -run '^(TestQuantizedLinearMXFP4MatchesDequantizedWeight|TestQuantizedLinearNVFP4FusesModelOptGlobalScale|TestQuantizedLinearNVFP4FusesPerRowModelOptGlobalScale|TestQuantizedEmbeddingAsLinearPreservesGlobalScale)$'
+go test -count=1 ./x/models/qwen3_5
 
 /bin/rm -rf "$mlx_test_build"
 cmake -S "$mlx_source" -B "$mlx_test_build" \
