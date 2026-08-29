@@ -1115,9 +1115,7 @@ func (g *GatedDeltaNet) Forward(x *mlx.Array, b *batch.Batch, c cache.Cache, B, 
 
 	convOut, convStates := nn.CausalConv1D(b, qkv, g.Conv1D, int(convTail), opts...)
 	out, deltaStates := nn.GatedDelta(b, convOut, mixedBA, g.DtBias, g.AExp, opts...)
-	outDType := out.DType()
-	out = mlx.RMSNormFn(out, g.NormWeight, cfg.RMSNormEps)
-	out = mlx.Mul(out.AsType(mlx.DTypeFloat32), mlx.SiLU(z.AsType(mlx.DTypeFloat32))).AsType(outDType)
+	out = mlx.GatedDeltaOutput(out, z, g.NormWeight, cfg.RMSNormEps)
 	out = mlx.Reshape(out, B, L, valueDim)
 	out = g.OutProj.Forward(out)
 	if rc != nil {
