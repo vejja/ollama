@@ -3,16 +3,18 @@
 set -euo pipefail
 
 usage() {
-  print -ru2 -- "usage: prepare-release.sh OLLAMA_TAG MLX_REPOSITORY OUTPUT_DIRECTORY"
+  print -ru2 -- "usage: prepare-release.sh OLLAMA_TAG [MLX_REPOSITORY] [OUTPUT_DIRECTORY]"
   exit 2
 }
 
-(( $# == 3 )) || usage
+(( $# >= 1 && $# <= 3 )) || usage
 ollama_tag="$1"
-mlx_repo="${2:A}"
-output_root="${3:A}"
 script_dir="${0:A:h}"
 ollama_repo="${script_dir:h:h}"
+mlx_repo="${${2:-${MLX_REPOSITORY:-${ollama_repo:h}/mlx}}:A}"
+output_root="${${3:-${RELEASE_WORKTREE_ROOT:-${ollama_repo:h}/release-worktrees}/$ollama_tag}:A}"
+ollama_upstream="https://github.com/ollama/ollama.git"
+mlx_upstream="https://github.com/ml-explore/mlx.git"
 
 [[ "$ollama_tag" == v<->.<->.<-> ]] || usage
 [[ -d "$mlx_repo/.git" ]] || {
@@ -29,7 +31,7 @@ old_ollama_patch="$(git -C "$ollama_repo" rev-parse HEAD)"
 old_mlx_base="$(/usr/bin/jq -r '.mlx.upstream_commit' "$ollama_repo/fork/versions.json")"
 old_mlx_patch="$(/usr/bin/jq -r '.mlx.patched_commit' "$ollama_repo/fork/versions.json")"
 
-git -C "$ollama_repo" fetch upstream tag "$ollama_tag"
+git -C "$ollama_repo" fetch "$ollama_upstream" tag "$ollama_tag"
 new_ollama_base="$(git -C "$ollama_repo" rev-parse "${ollama_tag}^{commit}")"
 new_mlx_base="$(git -C "$ollama_repo" show "$new_ollama_base:MLX_VERSION")"
 new_mlx_c_base="$(git -C "$ollama_repo" show "$new_ollama_base:MLX_C_VERSION")"
@@ -37,7 +39,7 @@ new_mlx_c_base="$(git -C "$ollama_repo" show "$new_ollama_base:MLX_C_VERSION")"
 /bin/mkdir -p "$output_root"
 mlx_branch="releases/ollama-${ollama_tag}-global-scale.1"
 ollama_branch="releases/${ollama_tag}-fp16.1"
-git -C "$mlx_repo" fetch upstream "$new_mlx_base"
+git -C "$mlx_repo" fetch "$mlx_upstream" "$new_mlx_base"
 git -C "$mlx_repo" worktree add -b "$mlx_branch" "$output_root/mlx" "$new_mlx_base"
 git -C "$output_root/mlx" cherry-pick "$old_mlx_base..$old_mlx_patch"
 
